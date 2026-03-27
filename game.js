@@ -100,7 +100,6 @@ const WEAPONS = {
     },
 };
 
-const KEY_MAP = { '1': 'stapler', '2': 'keyboard', '3': 'coffee', '4': 'chair', '5': 'papers' };
 const ACTION_ORDER = ['stapler', 'keyboard', 'coffee', 'chair', 'papers'];
 
 // ── State ─────────────────────────────────────────────────────
@@ -470,6 +469,51 @@ async function gameOver(victory) {
     showScreen('end-screen');
 }
 
+// ── Keyboard smash (any key) ──────────────────────────────────
+
+const KEYBOARD_HITS = [
+    key => `You SLAM the keyboard into Chad's face with "${key}"!! `,
+    key => `"${key}" KEY straight to Chad's nose!! `,
+    key => `You bash Chad's skull with the keyboard [${key}]!! `,
+    key => `CRACK!! The "${key}" key leaves a mark on Chad's forehead!! `,
+    key => `You smash [${key}] right into Chad's teeth!! `,
+];
+
+async function keyboardSmash(key) {
+    if (!state.playerTurn || state.busy) return;
+    if (state.player.stunned) { log("You're too stressed to attack!", 'system'); return; }
+
+    state.busy = true;
+    setButtonsEnabled(false);
+
+    const dmg = rand(10, 20);
+    const isCrit = Math.random() < 0.2;
+    const finalDmg = isCrit ? Math.floor(dmg * 1.8) : dmg;
+
+    const msg = KEYBOARD_HITS[rand(0, KEYBOARD_HITS.length - 1)](key.toUpperCase());
+    log(msg + `(${finalDmg} dmg${isCrit ? ' — CRITICAL!!' : ''})`, 'weapon');
+
+    if (state.boss.shielded) {
+        const reduced = Math.floor(finalDmg * 0.5);
+        state.boss.shielded = false;
+        log("HR's shield absorbs half!", 'system');
+        damageDealt += reduced;
+        state.boss.hp -= reduced;
+        await animateBossHurt(reduced, false);
+    } else {
+        damageDealt += finalDmg;
+        state.boss.hp -= finalDmg;
+        await animateBossHurt(finalDmg, isCrit);
+    }
+
+    turns++;
+    updateBossUI();
+    if (checkBossDefeated()) return;
+    await checkPhase();
+    await delay(300);
+    await bossTurn();
+}
+
 // ── Start ─────────────────────────────────────────────────────
 
 function startGame() {
@@ -485,7 +529,7 @@ function startGame() {
     qs('#log-entries').innerHTML = '';
 
     log(`💼 Chad walks in. Time to settle this once and for all.`, 'system');
-    log(`Press 1–5 or tap a weapon to attack!`, 'system');
+    log(`⌨️ SMASH any keyboard key to hit Chad in the face — or tap a weapon!`, 'system');
 
     updateBossUI();
     updatePlayerUI();
@@ -506,18 +550,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Keyboard: press 1–5
+    // ANY key press = smash keyboard into Chad's face
     document.addEventListener('keydown', e => {
         if (e.repeat) return;
-        const action = KEY_MAP[e.key];
-        if (!action) return;
+        // Ignore modifier-only keys
+        if (['Shift','Control','Alt','Meta','Tab','CapsLock','Escape'].includes(e.key)) return;
 
-        // Start game on key press from title screen
         if (qs('#title-screen').classList.contains('active')) {
             startGame(); return;
         }
+        if (qs('#end-screen').classList.contains('active')) {
+            startGame(); return;
+        }
         if (qs('#battle-screen').classList.contains('active')) {
-            playerAction(action);
+            keyboardSmash(e.key);
         }
     });
 });

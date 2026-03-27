@@ -1,88 +1,126 @@
 // ============================================================
-//  Kill the Boss — Game Logic
+//  Kill the Boss — Office Warfare
 // ============================================================
 
-// ─── Boss definitions ────────────────────────────────────────
+const BOSS = {
+    name: 'Chad from Management',
+    emoji: '👔',
+    maxHp: 120,
+    phases: [
+        {
+            threshold: 1.00,
+            label: 'Passive Aggressive',
+            phaseClass: 'boss-phase-1',
+            attacks: [
+                { weight: 40, fn: attackEmail },
+                { weight: 30, fn: attackMeeting },
+                { weight: 30, fn: attackCredit },
+            ],
+        },
+        {
+            threshold: 0.60,
+            label: 'Micromanager Mode',
+            phaseClass: 'boss-phase-2',
+            emoji: '🤵',
+            attacks: [
+                { weight: 30, fn: attackEmail },
+                { weight: 25, fn: attackPIP },
+                { weight: 25, fn: attackSlack },
+                { weight: 20, fn: attackShield },
+            ],
+        },
+        {
+            threshold: 0.25,
+            label: '🔥 FULL MELTDOWN',
+            phaseClass: 'boss-phase-3',
+            emoji: '🤬',
+            attacks: [
+                { weight: 40, fn: attackFriday },
+                { weight: 35, fn: attackFire },
+                { weight: 25, fn: attackPIP },
+            ],
+        },
+    ],
+};
 
-const BOSSES = [
-    {
-        name: 'Malachar the Destroyer',
-        emoji: '😈',
-        maxHp: 150,
-        phases: [
-            {
-                threshold: 1.00,  // Phase 1: full HP to 60%
-                label: 'Phase I',
-                phaseClass: 'boss-phase-1',
-                announceAt: null,
-                attacks: [
-                    { name: 'Slash',        weight: 50, fn: bossSlash },
-                    { name: 'Smash',        weight: 30, fn: bossSmash },
-                    { name: 'Roar',         weight: 20, fn: bossRoar  },
-                ],
-            },
-            {
-                threshold: 0.60,  // Phase 2: 60% to 25%
-                label: 'Phase II',
-                phaseClass: 'boss-phase-2',
-                announceAt: 0.60,
-                attacks: [
-                    { name: 'Slash',         weight: 30, fn: bossSlash        },
-                    { name: 'Smash',         weight: 25, fn: bossSmash        },
-                    { name: 'Crushing Blow', weight: 25, fn: bossCrushingBlow },
-                    { name: 'Dark Shield',   weight: 20, fn: bossDarkShield   },
-                ],
-            },
-            {
-                threshold: 0.25,  // Phase 3: 25% and below
-                label: 'Phase III — BERSERK',
-                phaseClass: 'boss-phase-3',
-                announceAt: 0.25,
-                attacks: [
-                    { name: 'Devastating Strike', weight: 40, fn: bossDevastating },
-                    { name: 'Lifesteal',           weight: 35, fn: bossLifesteal   },
-                    { name: 'Smash',               weight: 25, fn: bossSmash       },
-                ],
-            },
-        ],
+// ── Weapons ──────────────────────────────────────────────────
+
+const WEAPONS = {
+    stapler: {
+        name: '📎 Stapler',
+        cost: 0,
+        action: 'stapler',
+        use: async () => {
+            const dmg = rand(8, 16);
+            log(`You hurl the stapler right at Chad's forehead! (${dmg} dmg)`, 'weapon');
+            await dealDamageToBoss(dmg);
+        },
     },
-];
+    keyboard: {
+        name: '⌨️ Keyboard',
+        cost: 20,
+        action: 'keyboard',
+        use: async () => {
+            const dmg = rand(22, 34);
+            log(`You SMASH Chad in the face with the keyboard!! (${dmg} dmg)`, 'weapon');
+            await dealDamageToBoss(dmg);
+        },
+    },
+    coffee: {
+        name: '☕ Hot Coffee',
+        cost: 15,
+        use: async () => {
+            const dmg = rand(18, 26);
+            log(`You dump scalding coffee on Chad! He screams! (${dmg} dmg)`, 'weapon');
+            await dealDamageToBoss(dmg);
+            if (Math.random() < 0.40 && !state.boss.berserk) {
+                state.boss.stunned = true;
+                log('Chad is too busy crying to attack next turn!', 'stun');
+            }
+        },
+    },
+    chair: {
+        name: '🪑 Office Chair',
+        cost: 25,
+        use: async () => {
+            const dmg = rand(30, 45);
+            log(`You swing the entire office chair at Chad! WHAM! (${dmg} dmg)`, 'weapon');
+            await dealDamageToBoss(dmg, true); // crit visual
+        },
+    },
+    papers: {
+        name: '📋 TPS Reports',
+        cost: 0,
+        use: async () => {
+            state.player.guarding = true;
+            const rest = 15;
+            state.player.hp = clamp(state.player.hp + rest, 0, state.player.maxHp);
+            log(`You hide behind a stack of TPS reports and catch your breath. (+${rest} sanity)`, 'heal');
+        },
+    },
+};
 
-// ─── Game state ──────────────────────────────────────────────
+const KEY_MAP = { '1': 'stapler', '2': 'keyboard', '3': 'coffee', '4': 'chair', '5': 'papers' };
+const ACTION_ORDER = ['stapler', 'keyboard', 'coffee', 'chair', 'papers'];
+
+// ── State ─────────────────────────────────────────────────────
 
 let state = {};
-let turns = 0;
-let damageDealt = 0;
-let damageReceived = 0;
+let turns = 0, damageDealt = 0, damageReceived = 0;
 
 function initState() {
     state = {
-        player: {
-            hp: 100, maxHp: 100,
-            mp: 60,  maxMp: 60,
-            guarding: false,
-            stunned: false,
-        },
-        boss: {
-            hp: 0, maxHp: 0,
-            stunned: false,
-            shielded: false,
-            buffed: false,
-            berserk: false,
-            currentPhaseIdx: 0,
-        },
-        bossData: null,
+        player: { hp: 100, maxHp: 100, mp: 60, maxMp: 60, guarding: false, stunned: false },
+        boss:   { hp: 0, maxHp: 0, stunned: false, shielded: false, buffed: false, berserk: false, currentPhaseIdx: 0 },
         playerTurn: true,
         busy: false,
     };
-    turns = 0;
-    damageDealt = 0;
-    damageReceived = 0;
+    turns = 0; damageDealt = 0; damageReceived = 0;
 }
 
-// ─── DOM helpers ─────────────────────────────────────────────
+// ── DOM helpers ───────────────────────────────────────────────
 
-function qs(sel) { return document.querySelector(sel); }
+const qs = sel => document.querySelector(sel);
 
 function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -93,58 +131,39 @@ function log(msg, type = 'system') {
     const el = document.createElement('div');
     el.className = `log-entry log-${type}`;
     el.textContent = msg;
-    const container = qs('#log-entries');
-    container.appendChild(el);
-    container.scrollTop = container.scrollHeight;
-    // Keep log from getting too long
-    while (container.children.length > 60) {
-        container.removeChild(container.firstChild);
-    }
+    const c = qs('#log-entries');
+    c.appendChild(el);
+    c.scrollTop = c.scrollHeight;
+    while (c.children.length > 80) c.removeChild(c.firstChild);
 }
 
-function rand(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function clamp(val, min, max) {
-    return Math.max(min, Math.min(max, val));
-}
+function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function weightedPick(arr) {
-    const total = arr.reduce((s, a) => s + a.weight, 0);
-    let r = Math.random() * total;
-    for (const item of arr) {
-        r -= item.weight;
-        if (r <= 0) return item;
-    }
+    let r = Math.random() * arr.reduce((s, a) => s + a.weight, 0);
+    for (const item of arr) { r -= item.weight; if (r <= 0) return item; }
     return arr[arr.length - 1];
 }
 
-function delay(ms) {
-    return new Promise(r => setTimeout(r, ms));
-}
-
-// ─── UI update helpers ───────────────────────────────────────
+// ── UI Updates ────────────────────────────────────────────────
 
 function updateBossUI() {
-    const { boss, bossData } = state;
+    const { boss } = state;
     const pct = clamp(boss.hp / boss.maxHp, 0, 1);
     const bar = qs('#boss-hp-bar');
     bar.style.width = (pct * 100) + '%';
     bar.className = 'hp-bar boss-bar' + (pct < 0.25 ? ' low' : '');
     qs('#boss-hp-text').textContent = `${Math.max(0, boss.hp)} / ${boss.maxHp}`;
 
-    // Status effects
-    const effects = [];
-    if (boss.stunned)   effects.push({ label: 'Stunned',  cls: 'status-stun'  });
-    if (boss.shielded)  effects.push({ label: 'Shielded', cls: 'status-shield' });
-    if (boss.buffed)    effects.push({ label: 'Enraged',  cls: 'status-buff'  });
-    if (boss.berserk)   effects.push({ label: 'Berserk',  cls: 'status-berserk' });
-
-    const el = qs('#boss-status-effects');
-    el.innerHTML = effects.map(e =>
-        `<span class="status-badge ${e.cls}">${e.label}</span>`
-    ).join('');
+    const fx = [];
+    if (boss.stunned)  fx.push({ label: 'Crying',    cls: 'status-stun' });
+    if (boss.shielded) fx.push({ label: 'HR Shield',  cls: 'status-shield' });
+    if (boss.buffed)   fx.push({ label: 'Enraged',    cls: 'status-buff' });
+    if (boss.berserk)  fx.push({ label: 'MELTDOWN',   cls: 'status-berserk' });
+    qs('#boss-status-effects').innerHTML = fx.map(e =>
+        `<span class="status-badge ${e.cls}">${e.label}</span>`).join('');
 }
 
 function updatePlayerUI() {
@@ -154,47 +173,64 @@ function updatePlayerUI() {
 
     const hpBar = qs('#player-hp-bar');
     hpBar.style.width = (hpPct * 100) + '%';
-    hpBar.className = 'hp-bar player-bar'
-        + (hpPct < 0.30 ? ' low' : hpPct < 0.55 ? ' medium' : '');
+    hpBar.className = 'hp-bar player-bar' + (hpPct < 0.3 ? ' low' : hpPct < 0.55 ? ' medium' : '');
     qs('#player-hp-text').textContent = `${Math.max(0, player.hp)} / ${player.maxHp}`;
-
     qs('#player-mp-bar').style.width = (mpPct * 100) + '%';
     qs('#player-mp-text').textContent = `${player.mp} / ${player.maxMp}`;
 
-    // Status effects
-    const effects = [];
-    if (player.stunned)  effects.push({ label: 'Stunned', cls: 'status-stun'  });
-    if (player.guarding) effects.push({ label: 'Guarding', cls: 'status-guard' });
+    const fx = [];
+    if (player.stunned)  fx.push({ label: 'Stunned',  cls: 'status-stun' });
+    if (player.guarding) fx.push({ label: 'Blocking',  cls: 'status-guard' });
+    qs('#player-status-effects').innerHTML = fx.map(e =>
+        `<span class="status-badge ${e.cls}">${e.label}</span>`).join('');
 
-    const el = qs('#player-status-effects');
-    el.innerHTML = effects.map(e =>
-        `<span class="status-badge ${e.cls}">${e.label}</span>`
-    ).join('');
-
-    // Button states
     document.querySelectorAll('.action-btn').forEach(btn => {
-        const action = btn.dataset.action;
-        const cost = ACTION_COSTS[action] || 0;
-        btn.disabled = !state.playerTurn || state.busy || player.mp < cost || player.stunned;
-        btn.classList.toggle('active-guard', action === 'guard' && player.guarding);
-    });
-
-    if (player.stunned) {
-        document.querySelectorAll('.action-btn').forEach(btn => btn.disabled = true);
-    }
-}
-
-function setActionButtonsEnabled(enabled) {
-    document.querySelectorAll('.action-btn').forEach(btn => {
-        btn.disabled = !enabled;
+        const wk = WEAPONS[btn.dataset.action];
+        btn.disabled = !state.playerTurn || state.busy || (wk && player.mp < wk.cost) || player.stunned;
+        btn.classList.toggle('active-guard', btn.dataset.action === 'papers' && player.guarding);
     });
 }
 
-// ─── Boss sprite animation ───────────────────────────────────
+function setButtonsEnabled(on) {
+    document.querySelectorAll('.action-btn').forEach(b => b.disabled = !on);
+}
 
-function setBossPhaseClass(cls) {
+// ── Hit animations ────────────────────────────────────────────
+
+async function animateBossHurt(dmg, isCrit = false) {
     const sprite = qs('#boss-sprite');
-    sprite.className = cls;
+
+    // Screen shake
+    const game = qs('#game');
+    game.classList.remove('shaking');
+    game.offsetHeight;
+    game.classList.add('shaking');
+    setTimeout(() => game.classList.remove('shaking'), 450);
+
+    // Hurt animation
+    sprite.classList.add('boss-hurt');
+
+    // Hit splat emoji
+    const splats = ['💥', '👊', '🤛', '💢', '⚡', '🔥', '💫'];
+    const hitEl = qs('#hit-effect');
+    hitEl.textContent = splats[rand(0, splats.length - 1)];
+    hitEl.style.left = rand(20, 65) + '%';
+    hitEl.style.top  = rand(15, 55) + '%';
+    hitEl.classList.remove('hidden');
+    hitEl.style.animation = 'none'; hitEl.offsetHeight; hitEl.style.animation = '';
+
+    // Floating damage number
+    const dmgEl = qs('#damage-number');
+    dmgEl.textContent = isCrit ? `${dmg}!!` : `-${dmg}`;
+    dmgEl.className = 'damage-number' + (isCrit ? ' crit' : '');
+    dmgEl.style.left = rand(30, 60) + '%';
+    dmgEl.style.top  = rand(25, 50) + '%';
+    dmgEl.style.animation = 'none'; dmgEl.offsetHeight; dmgEl.style.animation = '';
+
+    await delay(550);
+    sprite.classList.remove('boss-hurt');
+    hitEl.classList.add('hidden');
+    dmgEl.className = 'damage-number hidden';
 }
 
 async function animateBossAttack() {
@@ -204,251 +240,118 @@ async function animateBossAttack() {
     sprite.classList.remove('boss-attacking');
 }
 
-async function animateBossHurt() {
-    const sprite = qs('#boss-sprite');
-    sprite.classList.add('boss-hurt');
+// ── Phase transitions ─────────────────────────────────────────
 
-    // Show hit effect
-    const hitEl = qs('#hit-effect');
-    hitEl.textContent = ['💥', '⚡', '✨', '🔥'][rand(0, 3)];
-    hitEl.style.left = rand(30, 70) + '%';
-    hitEl.style.top = rand(20, 60) + '%';
-    hitEl.classList.remove('hidden');
-    hitEl.style.animation = 'none';
-    hitEl.offsetHeight; // reflow
-    hitEl.style.animation = '';
-
-    await delay(400);
-    sprite.classList.remove('boss-hurt');
-    hitEl.classList.add('hidden');
-}
-
-// ─── Phase transition ────────────────────────────────────────
-
-async function checkPhaseTransition() {
-    const { boss, bossData } = state;
-    const hpPct = boss.hp / boss.maxHp;
-    const phases = bossData.phases;
-
-    let targetIdx = 0;
-    for (let i = phases.length - 1; i >= 0; i--) {
-        if (hpPct <= phases[i].threshold) {
-            targetIdx = i;
-            break;
-        }
+async function checkPhase() {
+    const pct = state.boss.hp / state.boss.maxHp;
+    let idx = 0;
+    for (let i = 1; i < BOSS.phases.length; i++) {
+        if (pct < BOSS.phases[i].threshold) idx = i;
     }
+    if (idx <= state.boss.currentPhaseIdx) return;
 
-    // Special: phase 1 always starts at idx 0 until threshold is crossed
-    // Recalculate: find the highest-indexed phase whose threshold the boss HP is below
-    targetIdx = 0;
-    for (let i = 1; i < phases.length; i++) {
-        if (hpPct < phases[i].threshold) {
-            targetIdx = i;
-        }
+    state.boss.currentPhaseIdx = idx;
+    const phase = BOSS.phases[idx];
+
+    qs('#boss-phase-badge').textContent = phase.label;
+    qs('#boss-phase-badge').className = `boss-phase-badge phase-${idx + 1}`;
+    qs('#boss-sprite').className = phase.phaseClass;
+    if (phase.emoji) qs('#boss-sprite .boss-face').textContent = phase.emoji;
+    if (idx === 2) state.boss.berserk = true;
+
+    const msgs = [null, 'Chad is getting desperate — MICROMANAGER MODE!', 'Chad is having a FULL MELTDOWN!'];
+    if (msgs[idx]) {
+        log('⚠ ' + msgs[idx], 'phase');
+        showPhaseOverlay(msgs[idx]);
     }
-
-    if (targetIdx > boss.currentPhaseIdx) {
-        boss.currentPhaseIdx = targetIdx;
-        const phase = phases[targetIdx];
-
-        // Update badge
-        const badge = qs('#boss-phase-badge');
-        badge.textContent = phase.label;
-        badge.className = `boss-phase-badge phase-${targetIdx + 1}`;
-
-        // Update sprite class
-        setBossPhaseClass(phase.phaseClass);
-
-        // Update boss face emoji
-        const faces = ['😈', '👹', '💀'];
-        qs('#boss-sprite .boss-face').textContent = faces[targetIdx] || '💀';
-
-        // Set berserk status on phase 3
-        if (targetIdx === 2) {
-            boss.berserk = true;
-        }
-
-        // Announce
-        const announcements = [
-            null,
-            `${bossData.name} enters Phase II — power surges!`,
-            `${bossData.name} goes BERSERK — danger!`,
-        ];
-        if (announcements[targetIdx]) {
-            log('⚠ ' + announcements[targetIdx], 'phase');
-            log('The boss is enraged — attacks grow stronger!', 'warn');
-        }
-
-        // Flash overlay
-        showPhaseOverlay(announcements[targetIdx] || '');
-        await delay(500);
-    }
+    await delay(500);
 }
 
 function showPhaseOverlay(msg) {
-    let overlay = qs('#phase-overlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'phase-overlay';
-        const inner = document.createElement('div');
-        inner.className = 'phase-message';
-        overlay.appendChild(inner);
-        document.body.appendChild(overlay);
+    let o = qs('#phase-overlay');
+    if (!o) {
+        o = document.createElement('div');
+        o.id = 'phase-overlay';
+        o.innerHTML = '<div class="phase-message"></div>';
+        document.body.appendChild(o);
     }
-    overlay.querySelector('.phase-message').textContent = msg;
-    overlay.classList.remove('show');
-    overlay.offsetHeight;
-    overlay.classList.add('show');
-    setTimeout(() => overlay.classList.remove('show'), 1800);
+    o.querySelector('.phase-message').textContent = msg;
+    o.classList.remove('show'); o.offsetHeight; o.classList.add('show');
+    setTimeout(() => o.classList.remove('show'), 1800);
 }
 
-// ─── Player actions ──────────────────────────────────────────
+// ── Player turn ───────────────────────────────────────────────
 
-const ACTION_COSTS = {
-    'slash': 0,
-    'power-strike': 20,
-    'magic-bolt': 15,
-    'heal': 25,
-    'guard': 0,
-};
+async function playerAction(actionKey) {
+    if (!state.playerTurn || state.busy) return;
+    if (!qs('#battle-screen').classList.contains('active')) return;
 
-async function playerAction(action) {
-    if (!state.playerTurn || state.busy || qs('#battle-screen').classList.contains('active') === false) return;
-
-    const cost = ACTION_COSTS[action] || 0;
-    if (state.player.mp < cost) {
-        log('Not enough MP!', 'system');
-        return;
-    }
+    const weapon = WEAPONS[actionKey];
+    if (!weapon) return;
+    if (state.player.mp < weapon.cost) { log('Not enough energy!', 'system'); return; }
+    if (state.player.stunned) { log("You're too stressed to act!", 'system'); return; }
 
     state.busy = true;
-    setActionButtonsEnabled(false);
-    state.player.mp = clamp(state.player.mp - cost, 0, state.player.maxMp);
+    setButtonsEnabled(false);
+
+    // Flash pressed button
+    const btn = document.querySelector(`[data-action="${actionKey}"]`);
+    if (btn) { btn.classList.add('pressed'); setTimeout(() => btn.classList.remove('pressed'), 150); }
+
+    state.player.mp = clamp(state.player.mp - weapon.cost, 0, state.player.maxMp);
     turns++;
 
-    switch (action) {
-        case 'slash':        await doSlash();       break;
-        case 'power-strike': await doPowerStrike();  break;
-        case 'magic-bolt':   await doMagicBolt();    break;
-        case 'heal':         await doHeal();         break;
-        case 'guard':        await doGuard();        break;
-    }
-
+    await weapon.use();
     updatePlayerUI();
     updateBossUI();
 
     if (checkBossDefeated()) return;
-
-    await checkPhaseTransition();
-    await delay(400);
-
-    // Boss turn
+    await checkPhase();
+    await delay(350);
     await bossTurn();
 }
 
-async function doSlash() {
-    const dmg = rand(10, 20);
-    log(`You slash the boss for ${dmg} damage.`, 'player');
-    await dealDamageToBoss(dmg);
-}
-
-async function doPowerStrike() {
-    const dmg = rand(25, 40);
-    log(`⚡ You unleash a Power Strike for ${dmg} damage!`, 'player');
-    await dealDamageToBoss(dmg);
-}
-
-async function doMagicBolt() {
-    const dmg = rand(20, 30);
-    const stunChance = Math.random() < 0.30;
-    log(`✨ Your Magic Bolt hits for ${dmg} damage!`, 'player');
-    await dealDamageToBoss(dmg);
-    if (stunChance && !state.boss.berserk) {
-        state.boss.stunned = true;
-        log('⚡ The boss is stunned and will skip a turn!', 'stun');
-    }
-}
-
-async function doHeal() {
-    const heal = 30;
-    state.player.hp = clamp(state.player.hp + heal, 0, state.player.maxHp);
-    log(`💚 You heal for ${heal} HP.`, 'heal');
-}
-
-async function doGuard() {
-    state.player.guarding = true;
-    log('🛡 You take a defensive stance.', 'player');
-}
-
-async function dealDamageToBoss(dmg) {
+async function dealDamageToBoss(dmg, isCrit = false) {
     if (state.boss.shielded) {
         dmg = Math.floor(dmg * 0.5);
         state.boss.shielded = false;
-        log('The boss\'s Dark Shield absorbs half the damage!', 'system');
+        log("HR's shield absorbs half the damage!", 'system');
     }
     damageDealt += dmg;
     state.boss.hp -= dmg;
-    await animateBossHurt();
+    await animateBossHurt(dmg, isCrit);
     updateBossUI();
 }
 
-// ─── Boss attacks ────────────────────────────────────────────
+// ── Boss attacks ──────────────────────────────────────────────
 
 async function bossTurn() {
     if (!qs('#battle-screen').classList.contains('active')) return;
 
-    const { boss, bossData } = state;
-
-    if (boss.stunned) {
-        log(`${bossData.name} is stunned and cannot act!`, 'stun');
-        boss.stunned = false;
-        endTurn();
-        return;
+    if (state.boss.stunned) {
+        log("Chad is still crying — skips his turn!", 'stun');
+        state.boss.stunned = false;
+        endTurn(); return;
     }
 
     await animateBossAttack();
 
-    const phase = bossData.phases[boss.currentPhaseIdx];
-    const chosenAttack = weightedPick(phase.attacks);
-    await chosenAttack.fn();
+    const phase = BOSS.phases[state.boss.currentPhaseIdx];
+    await weightedPick(phase.attacks).fn();
 
     updatePlayerUI();
     updateBossUI();
-
-    if (state.player.hp <= 0) {
-        await gameOver(false);
-        return;
-    }
-
+    if (state.player.hp <= 0) { await gameOver(false); return; }
     endTurn();
 }
 
-function endTurn() {
-    const { player } = state;
-
-    // Mana regen
-    player.mp = clamp(player.mp + 5, 0, player.maxMp);
-
-    // Clear guard (it only lasts one incoming hit)
-    player.guarding = false;
-
-    state.playerTurn = true;
-    state.busy = false;
-    updatePlayerUI();
-}
-
-function applyPlayerDamage(rawDmg) {
-    let dmg = rawDmg;
+function applyPlayerDamage(raw) {
+    let dmg = raw;
     if (state.player.guarding) {
         const blocked = Math.floor(dmg * 0.60);
         dmg -= blocked;
-        log(`Your guard blocks ${blocked} damage!`, 'player');
+        log(`The TPS Reports block ${blocked} damage!`, 'player');
         state.player.guarding = false;
-        // Counter
-        const counter = rand(3, 8);
-        log(`You counter for ${counter} damage!`, 'player');
-        state.boss.hp -= counter;
-        damageDealt += counter;
     }
     dmg = Math.max(1, dmg);
     damageReceived += dmg;
@@ -456,55 +359,85 @@ function applyPlayerDamage(rawDmg) {
     return dmg;
 }
 
-// Boss attack functions
-
-function bossSlash() {
-    const dmg = rand(3, 6);
-    const final = applyPlayerDamage(dmg);
-    log(`${state.bossData.name} slashes you for ${final} damage.`, 'boss');
+function endTurn() {
+    state.player.mp = clamp(state.player.mp + 5, 0, state.player.maxMp);
+    state.player.guarding = false;
+    state.playerTurn = true;
+    state.busy = false;
+    updatePlayerUI();
 }
 
-function bossSmash() {
-    const base = rand(5, 9);
-    const bonus = state.boss.buffed ? Math.floor(base * 0.3) : 0;
+// Boss attack functions
+function attackEmail() {
+    const dmg = rand(4, 9);
+    const msgs = [
+        `Chad sends a passive aggressive "per my last email" for ${dmg} stress!`,
+        `Chad replies-all to a 50-person thread. ${dmg} sanity lost!`,
+        `Chad emails your boss about "attitude issues." ${dmg} stress!`,
+    ];
+    log(msgs[rand(0, msgs.length-1)], 'boss');
+    applyPlayerDamage(dmg);
+}
+
+function attackMeeting() {
+    const dmg = rand(5, 10);
+    state.player.mp = clamp(state.player.mp - 8, 0, state.player.maxMp);
+    const msgs = [
+        `Chad schedules a 2-hour sync that could've been an email. (-8⚡, ${dmg} stress)`,
+        `Chad calls an emergency stand-up meeting at 4:58pm. (-8⚡, ${dmg} stress)`,
+    ];
+    log(msgs[rand(0, msgs.length-1)], 'boss');
+    applyPlayerDamage(dmg);
+}
+
+function attackCredit() {
+    const dmg = rand(6, 12);
+    const msgs = [
+        `Chad takes credit for YOUR project in front of everyone! ${dmg} sanity lost!`,
+        `Chad presents your work as his own idea. You're furious. ${dmg} stress!`,
+    ];
+    log(msgs[rand(0, msgs.length-1)], 'boss');
+    applyPlayerDamage(dmg);
+}
+
+function attackPIP() {
+    const dmg = rand(10, 18);
+    log(`Chad puts you on a Performance Improvement Plan!! ${dmg} stress!`, 'boss');
+    applyPlayerDamage(dmg);
+}
+
+function attackSlack() {
+    const dmg = rand(6, 11);
+    state.boss.buffed = true;
+    log(`Chad sends 12 Slack messages asking "did you see my last message??" ${dmg} stress! (He's getting hyped up)`, 'boss');
+    applyPlayerDamage(dmg);
+}
+
+function attackShield() {
+    state.boss.shielded = true;
+    log(`Chad runs to HR to cover himself. Next hit will be reduced!`, 'boss');
+}
+
+function attackFriday() {
+    const base = rand(14, 22);
+    const bonus = state.boss.buffed ? Math.floor(base * 0.4) : 0;
     const dmg = base + bonus;
     state.boss.buffed = false;
-    const final = applyPlayerDamage(dmg);
-    log(`${state.bossData.name} smashes you for ${final} damage!`, 'boss');
+    log(`Chad dumps a MASSIVE project on you at 5pm Friday!! ${dmg} stress!!`, 'boss');
+    applyPlayerDamage(dmg);
 }
 
-function bossRoar() {
-    state.boss.buffed = true;
-    log(`${state.bossData.name} lets out a ROAR! Next attack +30%!`, 'boss');
+function attackFire() {
+    const dmg = rand(12, 20);
+    log(`Chad screams "YOU'RE FIRED!" (he can't actually fire you but still) ${dmg} stress!!`, 'boss');
+    applyPlayerDamage(dmg);
+    if (Math.random() < 0.3) {
+        state.player.stunned = true;
+        log('The humiliation leaves you speechless — skip next turn!', 'stun');
+    }
 }
 
-function bossCrushingBlow() {
-    const dmg = rand(7, 12);
-    const final = applyPlayerDamage(dmg);
-    log(`💀 ${state.bossData.name} delivers a Crushing Blow for ${final} damage!`, 'boss');
-}
-
-function bossDarkShield() {
-    state.boss.shielded = true;
-    log(`🌑 ${state.bossData.name} conjures a Dark Shield — next hit absorbed!`, 'boss');
-}
-
-function bossDevastating() {
-    const dmg = rand(10, 16);
-    const final = applyPlayerDamage(dmg);
-    log(`🔥 ${state.bossData.name} unleashes a Devastating Strike for ${final} damage!!`, 'boss');
-}
-
-function bossLifesteal() {
-    const dmg = rand(6, 10);
-    const final = applyPlayerDamage(dmg);
-    const heal = Math.floor(final * 0.3);
-    state.boss.hp = clamp(state.boss.hp + heal, 0, state.boss.maxHp);
-    log(`🩸 ${state.bossData.name} drains ${final} HP and heals for ${heal}!`, 'boss');
-    updateBossUI();
-}
-
-// ─── Win / Lose ──────────────────────────────────────────────
+// ── Win / Lose ────────────────────────────────────────────────
 
 function checkBossDefeated() {
     if (state.boss.hp <= 0) {
@@ -517,91 +450,74 @@ function checkBossDefeated() {
 }
 
 async function gameOver(victory) {
-    state.busy = true;
-    state.playerTurn = false;
-    setActionButtonsEnabled(false);
-
+    state.busy = true; state.playerTurn = false;
+    setButtonsEnabled(false);
     await delay(600);
 
-    const endIcon   = qs('#end-icon');
-    const endTitle  = qs('#end-title');
-    const endMsg    = qs('#end-message');
-    const endStats  = qs('#end-stats');
+    qs('#end-icon').textContent    = victory ? '🏆' : '😵';
+    qs('#end-title').textContent   = victory ? 'YOU WIN!' : 'BURNED OUT';
+    qs('#end-title').className     = victory ? 'victory' : 'defeat';
+    qs('#end-message').textContent = victory
+        ? 'Chad is on the floor. You got the corner office. LEGEND.'
+        : 'Chad wins this round... but you\'ll be back Monday.';
 
-    if (victory) {
-        endIcon.textContent = '🏆';
-        endTitle.textContent = 'VICTORY!';
-        endTitle.className = 'victory';
-        endMsg.textContent = 'The darkness is vanquished. The realm is saved!';
-    } else {
-        endIcon.textContent = '💀';
-        endTitle.textContent = 'DEFEATED';
-        endTitle.className = 'defeat';
-        endMsg.textContent = `${state.bossData.name} stands triumphant. Rise again, hero.`;
-    }
-
-    endStats.innerHTML = `
-        <div class="stat-item">
-            <span class="stat-label">Turns</span>
-            <span class="stat-value">${turns}</span>
-        </div>
-        <div class="stat-item">
-            <span class="stat-label">Damage Dealt</span>
-            <span class="stat-value">${damageDealt}</span>
-        </div>
-        <div class="stat-item">
-            <span class="stat-label">Damage Taken</span>
-            <span class="stat-value">${damageReceived}</span>
-        </div>
-        <div class="stat-item">
-            <span class="stat-label">HP Remaining</span>
-            <span class="stat-value">${Math.max(0, state.player.hp)}</span>
-        </div>
+    qs('#end-stats').innerHTML = `
+        <div class="stat-item"><span class="stat-label">Turns</span><span class="stat-value">${turns}</span></div>
+        <div class="stat-item"><span class="stat-label">Dealt</span><span class="stat-value">${damageDealt}</span></div>
+        <div class="stat-item"><span class="stat-label">Taken</span><span class="stat-value">${damageReceived}</span></div>
+        <div class="stat-item"><span class="stat-label">Sanity Left</span><span class="stat-value">${Math.max(0, state.player.hp)}</span></div>
     `;
-
     showScreen('end-screen');
 }
 
-// ─── Game start ──────────────────────────────────────────────
+// ── Start ─────────────────────────────────────────────────────
 
 function startGame() {
     initState();
+    state.boss.hp = BOSS.maxHp;
+    state.boss.maxHp = BOSS.maxHp;
 
-    const boss = BOSSES[0];
-    state.bossData = boss;
-    state.boss.hp = boss.maxHp;
-    state.boss.maxHp = boss.maxHp;
-
-    qs('#boss-name-display').textContent = boss.name;
-    qs('#boss-phase-badge').textContent = boss.phases[0].label;
-    qs('#boss-phase-badge').className = '';
-    setBossPhaseClass(boss.phases[0].phaseClass);
-    qs('#boss-sprite .boss-face').textContent = boss.emoji;
-
-    // Clear log
+    qs('#boss-name-display').textContent = BOSS.name;
+    qs('#boss-phase-badge').textContent  = BOSS.phases[0].label;
+    qs('#boss-phase-badge').className    = '';
+    qs('#boss-sprite').className         = BOSS.phases[0].phaseClass;
+    qs('#boss-sprite .boss-face').textContent = BOSS.emoji;
     qs('#log-entries').innerHTML = '';
 
-    log(`⚔ The battle begins! Face ${boss.name}!`, 'system');
-    log('Choose your action wisely...', 'system');
+    log(`💼 Chad walks in. Time to settle this once and for all.`, 'system');
+    log(`Press 1–5 or tap a weapon to attack!`, 'system');
 
     updateBossUI();
     updatePlayerUI();
-
     showScreen('battle-screen');
     state.busy = false;
 }
 
-// ─── Event listeners ─────────────────────────────────────────
+// ── Events ────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
     qs('#start-btn').addEventListener('click', startGame);
     qs('#restart-btn').addEventListener('click', startGame);
 
+    // Click buttons
     document.querySelectorAll('.action-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            if (!btn.disabled) {
-                playerAction(btn.dataset.action);
-            }
+            if (!btn.disabled) playerAction(btn.dataset.action);
         });
+    });
+
+    // Keyboard: press 1–5
+    document.addEventListener('keydown', e => {
+        if (e.repeat) return;
+        const action = KEY_MAP[e.key];
+        if (!action) return;
+
+        // Start game on key press from title screen
+        if (qs('#title-screen').classList.contains('active')) {
+            startGame(); return;
+        }
+        if (qs('#battle-screen').classList.contains('active')) {
+            playerAction(action);
+        }
     });
 });

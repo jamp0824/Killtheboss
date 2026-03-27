@@ -12,10 +12,10 @@
         <!-- Title Screen -->
         <div id="title-screen" class="screen active">
             <div class="title-content">
-                <div class="title-boss-art">💀</div>
+                <div class="title-boss-art">👔</div>
                 <h1>KILL THE BOSS</h1>
-                <p class="subtitle">Face the darkness. Survive the storm.</p>
-                <button id="start-btn" class="big-btn">BEGIN YOUR QUEST</button>
+                <p class="subtitle">Your manager has been a jackass for the last time.</p>
+                <button id="start-btn" class="big-btn">CLOCK IN</button>
             </div>
         </div>
 
@@ -25,11 +25,11 @@
             <div id="boss-area">
                 <div id="boss-info">
                     <div id="boss-name-display">???</div>
-                    <div id="boss-phase-badge">Phase I</div>
+                    <div id="boss-phase-badge">Passive Aggressive</div>
                 </div>
                 <div class="hp-bar-container" id="boss-hp-container">
                     <div id="boss-hp-bar" class="hp-bar boss-bar"></div>
-                    <span id="boss-hp-text" class="hp-text">400 / 400</span>
+                    <span id="boss-hp-text" class="hp-text">100 / 100</span>
                 </div>
                 <div id="boss-status-effects"></div>
 
@@ -37,11 +37,12 @@
                     <div id="boss-sprite" class="boss-phase-1">
                         <div class="boss-body">
                             <div class="boss-glow"></div>
-                            <div class="boss-face">😈</div>
+                            <div class="boss-face">👔</div>
                             <div class="boss-aura"></div>
                         </div>
                     </div>
-                    <div id="hit-effect" class="hit-effect hidden">💥</div>
+                    <div id="hit-effect" class="hit-effect hidden"></div>
+                    <div id="damage-number" class="damage-number hidden"></div>
                 </div>
             </div>
 
@@ -51,47 +52,53 @@
 
             <div id="player-area">
                 <div id="player-info">
-                    <div id="player-name-display">Hero</div>
+                    <div id="player-name-display">You</div>
                     <div id="player-status-effects"></div>
                 </div>
                 <div class="hp-bar-container">
-                    <label>HP</label>
+                    <label>😤</label>
                     <div id="player-hp-bar" class="hp-bar player-bar"></div>
                     <span id="player-hp-text" class="hp-text">100 / 100</span>
                 </div>
                 <div class="hp-bar-container">
-                    <label>MP</label>
+                    <label>⚡</label>
                     <div id="player-mp-bar" class="mp-bar"></div>
                     <span id="player-mp-text" class="hp-text">60 / 60</span>
                 </div>
 
                 <div id="action-buttons">
-                    <button class="action-btn" data-action="slash" title="Basic attack — always available">
-                        <span class="btn-icon">⚔️</span>
-                        <span class="btn-name">Slash</span>
-                        <span class="btn-meta">10–20 dmg &bull; Free</span>
+                    <button class="action-btn" data-action="stapler">
+                        <span class="btn-key">1</span>
+                        <span class="btn-icon">📎</span>
+                        <span class="btn-name">Stapler</span>
+                        <span class="btn-meta">Throw it &bull; Free</span>
                     </button>
-                    <button class="action-btn" data-action="power-strike" title="Powerful blow — costs MP">
-                        <span class="btn-icon">💥</span>
-                        <span class="btn-name">Power Strike</span>
-                        <span class="btn-meta">25–40 dmg &bull; 20 MP</span>
+                    <button class="action-btn" data-action="keyboard">
+                        <span class="btn-key">2</span>
+                        <span class="btn-icon">⌨️</span>
+                        <span class="btn-name">Keyboard</span>
+                        <span class="btn-meta">Smash face &bull; 20⚡</span>
                     </button>
-                    <button class="action-btn" data-action="magic-bolt" title="Magic attack with stun chance">
-                        <span class="btn-icon">✨</span>
-                        <span class="btn-name">Magic Bolt</span>
-                        <span class="btn-meta">20–30 dmg &bull; 15 MP &bull; Stun?</span>
+                    <button class="action-btn" data-action="coffee">
+                        <span class="btn-key">3</span>
+                        <span class="btn-icon">☕</span>
+                        <span class="btn-name">Hot Coffee</span>
+                        <span class="btn-meta">Scald + stun &bull; 15⚡</span>
                     </button>
-                    <button class="action-btn" data-action="heal" title="Restore 30 HP">
-                        <span class="btn-icon">💚</span>
-                        <span class="btn-name">Heal</span>
-                        <span class="btn-meta">+30 HP &bull; 25 MP</span>
+                    <button class="action-btn" data-action="chair">
+                        <span class="btn-key">4</span>
+                        <span class="btn-icon">🪑</span>
+                        <span class="btn-name">Office Chair</span>
+                        <span class="btn-meta">Huge hit &bull; 25⚡</span>
                     </button>
-                    <button class="action-btn" data-action="guard" title="Reduce damage and counter-attack">
-                        <span class="btn-icon">🛡️</span>
-                        <span class="btn-name">Guard</span>
-                        <span class="btn-meta">Block 60% &bull; Free</span>
+                    <button class="action-btn" data-action="papers">
+                        <span class="btn-key">5</span>
+                        <span class="btn-icon">📋</span>
+                        <span class="btn-name">TPS Reports</span>
+                        <span class="btn-meta">Block + rest &bull; Free</span>
                     </button>
                 </div>
+                <div id="key-hint">Press 1–5 to attack</div>
             </div>
         </div>
 
@@ -102,7 +109,7 @@
                 <h2 id="end-title"></h2>
                 <p id="end-message"></p>
                 <div id="end-stats"></div>
-                <button id="restart-btn" class="big-btn">PLAY AGAIN</button>
+                <button id="restart-btn" class="big-btn">MONDAY AGAIN</button>
             </div>
         </div>
     </div>

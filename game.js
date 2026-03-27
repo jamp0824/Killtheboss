@@ -8,7 +8,7 @@ const BOSSES = [
     {
         name: 'Malachar the Destroyer',
         emoji: '😈',
-        maxHp: 400,
+        maxHp: 150,
         phases: [
             {
                 threshold: 1.00,  // Phase 1: full HP to 60%
@@ -459,14 +459,14 @@ function applyPlayerDamage(rawDmg) {
 // Boss attack functions
 
 function bossSlash() {
-    const dmg = rand(8, 15);
+    const dmg = rand(3, 6);
     const final = applyPlayerDamage(dmg);
     log(`${state.bossData.name} slashes you for ${final} damage.`, 'boss');
 }
 
 function bossSmash() {
-    const base = rand(15, 25);
-    const bonus = state.boss.buffed ? Math.floor(base * 0.5) : 0;
+    const base = rand(5, 9);
+    const bonus = state.boss.buffed ? Math.floor(base * 0.3) : 0;
     const dmg = base + bonus;
     state.boss.buffed = false;
     const final = applyPlayerDamage(dmg);
@@ -475,11 +475,11 @@ function bossSmash() {
 
 function bossRoar() {
     state.boss.buffed = true;
-    log(`${state.bossData.name} lets out a terrifying ROAR! Next attack +50%!`, 'boss');
+    log(`${state.bossData.name} lets out a ROAR! Next attack +30%!`, 'boss');
 }
 
 function bossCrushingBlow() {
-    const dmg = rand(20, 35);
+    const dmg = rand(7, 12);
     const final = applyPlayerDamage(dmg);
     log(`💀 ${state.bossData.name} delivers a Crushing Blow for ${final} damage!`, 'boss');
 }
@@ -490,15 +490,15 @@ function bossDarkShield() {
 }
 
 function bossDevastating() {
-    const dmg = rand(30, 50);
+    const dmg = rand(10, 16);
     const final = applyPlayerDamage(dmg);
     log(`🔥 ${state.bossData.name} unleashes a Devastating Strike for ${final} damage!!`, 'boss');
 }
 
 function bossLifesteal() {
-    const dmg = rand(18, 28);
+    const dmg = rand(6, 10);
     const final = applyPlayerDamage(dmg);
-    const heal = Math.floor(final * 0.6);
+    const heal = Math.floor(final * 0.3);
     state.boss.hp = clamp(state.boss.hp + heal, 0, state.boss.maxHp);
     log(`🩸 ${state.bossData.name} drains ${final} HP and heals for ${heal}!`, 'boss');
     updateBossUI();
